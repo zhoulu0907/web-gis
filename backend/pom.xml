@@ -47,6 +47,12 @@
             <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
 
+        <!-- Spring Boot JDBC (确保 DataSource 自动配置) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+
         <!-- MyBatis-Flex (Spring Boot 3 专用) -->
         <dependency>
             <groupId>com.mybatis-flex</groupId>
