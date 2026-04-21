@@ -36,6 +36,15 @@ interface SensorState {
   layerVisibility: ((layers: { pipelines: boolean; stations: boolean; label: boolean }) => void) | null;
   /** MapBoard 注册图层显隐回调 */
   setLayerVisibility: (fn: (layers: { pipelines: boolean; stations: boolean; label: boolean }) => void) => void;
+
+  /** 底图类型 */
+  basemapType: 'vector' | 'satellite';
+  /** 设置底图类型 */
+  setBasemapType: (type: 'vector' | 'satellite') => void;
+  /** 切换底图回调：由 MapBoard 注册，BasemapSwitcher 调用 */
+  switchBasemap: ((type: 'vector' | 'satellite') => void) | null;
+  /** MapBoard 注册底图切换回调 */
+  setSwitchBasemap: (fn: (type: 'vector' | 'satellite') => void) => void;
 }
 
 export const useSensorStore = create<SensorState>((set, get) => ({
@@ -46,6 +55,8 @@ export const useSensorStore = create<SensorState>((set, get) => ({
   wsConnected: false,
   flyToStation: null,
   layerVisibility: null,
+  basemapType: 'vector',
+  switchBasemap: null,
 
   setStations: (data) => set({ stations: data }),
   setPipelines: (data) => set({ pipelines: data }),
@@ -56,12 +67,11 @@ export const useSensorStore = create<SensorState>((set, get) => ({
     const newLatestData = new Map(latestData);
     newLatestData.set(payload.stationId, payload);
 
-    let newAlarmLogs = [...alarmLogs];
+    let newAlarmLogs = alarmLogs;
     if (payload.status === 1 || payload.status === 2) {
-      newAlarmLogs.unshift(payload);
-      if (newAlarmLogs.length > 10) {
-        newAlarmLogs = newAlarmLogs.slice(0, 10);
-      }
+      // 同一站点只保留最新一条告警，避免重复
+      const filtered = alarmLogs.filter((l) => l.stationId !== payload.stationId);
+      newAlarmLogs = [payload, ...filtered].slice(0, 10);
     }
 
     let newStations = stations;
@@ -88,6 +98,8 @@ export const useSensorStore = create<SensorState>((set, get) => ({
   },
 
   setWsConnected: (connected) => set({ wsConnected: connected }),
+  setBasemapType: (type) => set({ basemapType: type }),
   setFlyToStation: (fn) => set({ flyToStation: fn }),
   setLayerVisibility: (fn) => set({ layerVisibility: fn }),
+  setSwitchBasemap: (fn) => set({ switchBasemap: fn }),
 }));

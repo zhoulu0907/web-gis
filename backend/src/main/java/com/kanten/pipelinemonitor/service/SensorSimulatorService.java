@@ -2,6 +2,7 @@ package com.kanten.pipelinemonitor.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kanten.pipelinemonitor.dto.SensorDataVO;
+import com.kanten.pipelinemonitor.entity.SensorData;
 import com.kanten.pipelinemonitor.entity.Station;
 import com.kanten.pipelinemonitor.mapper.SensorDataMapper;
 import com.kanten.pipelinemonitor.mapper.StationMapper;
@@ -52,6 +53,15 @@ public class SensorSimulatorService {
             for (Station station : stations) {
                 SensorDataVO vo = generateSensorData(station);
 
+                // 写入历史数据
+                SensorData record = new SensorData();
+                record.setStationId(station.getId());
+                record.setPressure(vo.getPressure());
+                record.setFlow(vo.getFlow());
+                record.setStatus(vo.getStatus());
+                record.setTimestamp(LocalDateTime.now());
+                sensorDataMapper.insert(record);
+
                 // 更新站点最新状态
                 station.setStatus(vo.getStatus());
                 station.setUpdatedAt(LocalDateTime.now());
@@ -61,6 +71,12 @@ public class SensorSimulatorService {
                 String json = objectMapper.writeValueAsString(vo);
                 webSocketHandler.broadcast(json);
             }
+
+            // 清理 24 小时前的历史数据
+            LocalDateTime cutoff = LocalDateTime.now().minusHours(24);
+            sensorDataMapper.deleteByQuery(
+                QueryWrapper.create().where("timestamp < ?", cutoff)
+            );
 
             log.debug("传感器数据模拟完成，共 {} 个站点", stations.size());
         } catch (Exception e) {

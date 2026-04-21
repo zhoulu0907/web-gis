@@ -15,3 +15,50 @@ html, body, #root {
   color: #e2e8f0;
   font-family: system-ui, -apple-system, sans-serif;
 }
+
+/* Popup 深色样式 */
+.sensor-popup {
+  background: rgba(0, 21, 41, 0.95);
+  border: 1px solid rgba(0, 160, 233, 0.4);
+  border-radius: 6px;
+  padding: 8px;
+  color: #e2e8f0;
+  min-width: 320px;
+}
+
+.sensor-popup-loading {
+  text-align: center;
+  padding: 20px 0;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.sensor-popup-chart {
+  width: 340px;
+  height: 200px;
+  display: none;
+}
+
+/* Popup 容器覆盖样式 */
+.maplibregl-popup-content {
+  background: transparent !important;
+  border-radius: 6px !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+
+.maplibregl-popup-close-button {
+  color: #94a3b8 !important;
+  font-size: 18px !important;
+  right: 6px !important;
+  top: 4px !important;
+}
+
+.maplibregl-popup-close-button:hover {
+  color: #00e5ff !important;
+  background: transparent !important;
+}
+
+.maplibregl-popup-tip {
+  border-top-color: rgba(0, 21, 41, 0.95) !important;
+}

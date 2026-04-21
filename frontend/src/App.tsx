@@ -3,6 +3,7 @@ import LeftPanel from './components/LeftPanel';
 import RightPanel from './components/RightPanel';
 import Legend from './components/Legend';
 import LayerControl from './components/LayerControl';
+import BasemapSwitcher from './components/BasemapSwitcher';
 import { useWebSocket } from './hooks/useWebSocket';
 import './index.css';
 
@@ -19,6 +20,7 @@ function App() {
       <RightPanel />
       <LayerControl />
       <Legend />
+      <BasemapSwitcher />
     </div>
   );
 }

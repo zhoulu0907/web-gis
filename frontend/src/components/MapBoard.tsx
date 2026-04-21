@@ -1,12 +1,15 @@
 import { useEffect, useRef, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import * as echarts from 'echarts';
 import { useSensorStore } from '../store/sensorStore';
-import { fetchStations, fetchPipelines } from '../services/api';
+import { fetchStations, fetchPipelines, fetchHistory } from '../services/api';
+import { addBusinessLayers, DARK_STYLE, SATELLITE_STYLE } from '../utils/mapLayers';
+import { createTrendChartOption } from '../utils/echartsConfig';
 
 /**
  * 地图主组件
- * 渲染 MapLibre 深色底图 + 管道/站点图层 + 告警闪烁 + Tooltip + FlyTo
+ * 渲染 MapLibre 深色底图 + 管道/站点图层 + 告警闪烁 + Tooltip + FlyTo + 底图切换 + 流动动画
  */
 export default function MapBoard() {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -14,11 +17,56 @@ export default function MapBoard() {
   const blinkTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const blinkStateRef = useRef(false);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const flowTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const flowFrameRef = useRef(0);
   const setStations = useSensorStore((s) => s.setStations);
   const setPipelines = useSensorStore((s) => s.setPipelines);
   const setFlyToStation = useSensorStore((s) => s.setFlyToStation);
   const setLayerVisibilityFn = useSensorStore((s) => s.setLayerVisibility);
+  const setSwitchBasemap = useSensorStore((s) => s.setSwitchBasemap);
   const stations = useSensorStore((s) => s.stations);
+
+  // 启动告警呼吸动画
+  const startBlinkAnimation = useCallback(() => {
+    if (blinkTimerRef.current) clearInterval(blinkTimerRef.current);
+    blinkTimerRef.current = setInterval(() => {
+      if (!mapRef.current) return;
+      blinkStateRef.current = !blinkStateRef.current;
+      mapRef.current.setPaintProperty('stations-alarm', 'circle-opacity', blinkStateRef.current ? 0.6 : 0.1);
+      mapRef.current.setPaintProperty('stations-alarm', 'circle-radius', blinkStateRef.current ? 20 : 14);
+    }, 500);
+  }, []);
+
+  // 启动管道流动动画
+  const startFlowAnimation = useCallback(() => {
+    if (flowTimerRef.current) clearInterval(flowTimerRef.current);
+    // 14 帧循环 dasharray
+    const dashArraySequences = [
+      [0, 4, 3],
+      [0.5, 4, 2.5],
+      [1, 4, 2],
+      [1.5, 4, 1.5],
+      [2, 4, 1],
+      [2.5, 4, 0.5],
+      [3, 4, 0],
+      [0, 0.5, 3, 3.5],
+      [0, 1, 3, 3],
+      [0, 1.5, 3, 2.5],
+      [0, 2, 3, 2],
+      [0, 2.5, 3, 1.5],
+      [0, 3, 3, 1],
+      [0, 3.5, 3, 0.5],
+    ];
+    flowTimerRef.current = setInterval(() => {
+      if (!mapRef.current) return;
+      flowFrameRef.current = (flowFrameRef.current + 1) % dashArraySequences.length;
+      mapRef.current.setPaintProperty(
+        'pipelines-layer',
+        'line-dasharray',
+        dashArraySequences[flowFrameRef.current],
+      );
+    }, 100);
+  }, []);
 
   // FlyTo: 根据站点 ID 查找坐标并飞行
   const handleFlyToStation = useCallback((stationId: number) => {
@@ -37,6 +85,34 @@ export default function MapBoard() {
   useEffect(() => {
     setFlyToStation(handleFlyToStation);
   }, [setFlyToStation, handleFlyToStation]);
+
+  // 注册底图切换回调到 store
+  useEffect(() => {
+    setSwitchBasemap((type: 'vector' | 'satellite') => {
+      const map = mapRef.current;
+      const st = useSensorStore.getState().stations;
+      const pl = useSensorStore.getState().pipelines;
+      if (!map || !st || !pl) return;
+
+      // 保存当前视角
+      const center = map.getCenter();
+      const zoom = map.getZoom();
+      const bearing = map.getBearing();
+      const pitch = map.getPitch();
+
+      const newStyle = type === 'vector' ? DARK_STYLE : SATELLITE_STYLE;
+      map.setStyle(newStyle as maplibregl.StyleSpecification);
+
+      map.once('style.load', () => {
+        addBusinessLayers(map, st, pl);
+        map.jumpTo({ center, zoom, bearing, pitch });
+        startBlinkAnimation();
+        startFlowAnimation();
+      });
+
+      useSensorStore.getState().setBasemapType(type);
+    });
+  }, [setSwitchBasemap, startBlinkAnimation, startFlowAnimation]);
 
   // 注册图层显隐回调到 store
   useEffect(() => {
@@ -60,7 +136,7 @@ export default function MapBoard() {
 
     const map = new maplibregl.Map({
       container: mapContainer.current,
-      style: 'https://demotiles.maplibre.org/style.json',
+      style: DARK_STYLE,
       center: [121.65, 31.25],
       zoom: 11,
     });
@@ -83,104 +159,9 @@ export default function MapBoard() {
         setStations(stationsData);
         setPipelines(pipelinesData);
 
-        // 管道
-        map.addSource('pipelines', {
-          type: 'geojson',
-          data: pipelinesData as unknown as GeoJSON.FeatureCollection,
-        });
-        map.addLayer({
-          id: 'pipelines-layer',
-          type: 'line',
-          source: 'pipelines',
-          paint: {
-            'line-color': '#f59e0b',
-            'line-width': 3,
-            'line-opacity': 0.8,
-          },
-        });
-
-        // 站点
-        map.addSource('stations', {
-          type: 'geojson',
-          data: stationsData as unknown as GeoJSON.FeatureCollection,
-        });
-
-        // 光晕
-        map.addLayer({
-          id: 'stations-glow',
-          type: 'circle',
-          source: 'stations',
-          paint: {
-            'circle-radius': 12,
-            'circle-color': [
-              'match', ['get', 'status'],
-              0, '#69f0ae',
-              1, '#ffd54f',
-              2, '#ff5252',
-              '#69f0ae',
-            ],
-            'circle-opacity': 0.2,
-          },
-        });
-
-        // 主圆点
-        map.addLayer({
-          id: 'stations-layer',
-          type: 'circle',
-          source: 'stations',
-          paint: {
-            'circle-radius': 6,
-            'circle-color': [
-              'match', ['get', 'status'],
-              0, '#69f0ae',
-              1, '#ffd54f',
-              2, '#ff5252',
-              '#69f0ae',
-            ],
-            'circle-stroke-width': 2,
-            'circle-stroke-color': '#ffffff',
-          },
-        });
-
-        // 告警闪烁
-        map.addLayer({
-          id: 'stations-alarm',
-          type: 'circle',
-          source: 'stations',
-          filter: ['==', ['get', 'status'], 2],
-          paint: {
-            'circle-radius': 18,
-            'circle-color': '#ff5252',
-            'circle-opacity': 0.4,
-            'circle-blur': 0.8,
-          },
-        });
-
-        // 标注
-        map.addLayer({
-          id: 'stations-label',
-          type: 'symbol',
-          source: 'stations',
-          layout: {
-            'text-field': ['get', 'name'],
-            'text-size': 12,
-            'text-offset': [0, 1.5],
-            'text-anchor': 'top',
-          },
-          paint: {
-            'text-color': '#b0bec5',
-            'text-halo-color': '#001529',
-            'text-halo-width': 1,
-          },
-        });
-
-        // 告警呼吸动画
-        blinkTimerRef.current = setInterval(() => {
-          if (!mapRef.current) return;
-          blinkStateRef.current = !blinkStateRef.current;
-          map.setPaintProperty('stations-alarm', 'circle-opacity', blinkStateRef.current ? 0.6 : 0.1);
-          map.setPaintProperty('stations-alarm', 'circle-radius', blinkStateRef.current ? 20 : 14);
-        }, 500);
+        addBusinessLayers(map, stationsData, pipelinesData);
+        startBlinkAnimation();
+        startFlowAnimation();
 
       } catch (err) {
         console.error('加载地图数据失败', err);
@@ -226,8 +207,61 @@ export default function MapBoard() {
     map.on('mousemove', onMouseMove);
     map.on('mouseleave', onMouseLeave);
 
+    // 点击站点弹出 Popup + ECharts 折线图
+    map.on('click', 'stations-layer', async (e) => {
+      if (!e.features || e.features.length === 0) return;
+      const feature = e.features[0];
+      const stationId = feature.id as number;
+      const stationName = (feature.properties as Record<string, unknown>).name as string;
+      const coordinates = (feature.geometry as GeoJSON.Point).coordinates.slice() as [number, number];
+
+      // 创建 Popup DOM
+      const popupEl = document.createElement('div');
+      popupEl.className = 'sensor-popup';
+
+      const loadingEl = document.createElement('div');
+      loadingEl.className = 'sensor-popup-loading';
+      loadingEl.textContent = '加载历史数据...';
+      popupEl.appendChild(loadingEl);
+
+      const chartEl = document.createElement('div');
+      chartEl.className = 'sensor-popup-chart';
+      popupEl.appendChild(chartEl);
+
+      const popup = new maplibregl.Popup({ closeButton: true, maxWidth: '360px' })
+        .setLngLat(coordinates)
+        .setDOMContent(popupEl)
+        .addTo(map);
+
+      let chart: echarts.ECharts | null = null;
+
+      popup.on('close', () => {
+        if (chart) {
+          chart.dispose();
+          chart = null;
+        }
+      });
+
+      try {
+        const history = await fetchHistory(stationId, 5);
+        loadingEl.style.display = 'none';
+        chartEl.style.display = 'block';
+
+        chart = echarts.init(chartEl);
+        chart.setOption(createTrendChartOption(
+          history.stationName,
+          history.timestamps,
+          history.pressures,
+          history.flows,
+        ));
+      } catch {
+        loadingEl.textContent = '加载失败';
+      }
+    });
+
     return () => {
       if (blinkTimerRef.current) clearInterval(blinkTimerRef.current);
+      if (flowTimerRef.current) clearInterval(flowTimerRef.current);
       if (tooltipRef.current) {
         tooltipRef.current.remove();
         tooltipRef.current = null;
@@ -237,7 +271,7 @@ export default function MapBoard() {
       map.remove();
       mapRef.current = null;
     };
-  }, [setStations, setPipelines]);
+  }, [setStations, setPipelines, startBlinkAnimation, startFlowAnimation]);
 
   // 监听站点数据变化
   useEffect(() => {
