@@ -21,18 +21,7 @@ export default function MapBoard() {
 
     const map = new maplibregl.Map({
       container: mapContainer.current,
-      style: {
-        version: 8,
-        name: 'Dark',
-        sources: {},
-        layers: [
-          {
-            id: 'background',
-            type: 'background',
-            paint: { 'background-color': '#0a0e17' },
-          },
-        ],
-      },
+      style: 'https://demotiles.maplibre.org/style.json',
       center: [121.575, 31.249],
       zoom: 12,
     });
