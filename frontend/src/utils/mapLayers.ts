@@ -1,27 +1,48 @@
 import type { Map } from 'maplibre-gl';
 import type { GeoJsonFeatureCollection } from '../types';
 
-/** 矢量底图样式 URL */
-export const DARK_STYLE = 'https://demotiles.maplibre.org/style.json';
+/** 天地图 Token */
+const TK = '2c389bb7dfa280cbbfae88532d197aa2';
 
-/** 天地图卫星底图样式 */
+/** 天地图 WMTS 瓦片 URL 模板 */
+const tiandituTile = (layer: string) => [
+  `https://t0.tianditu.gov.cn/${layer}/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${layer.split('_')[0]}&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILECOL={x}&TILEROW={y}&TILEMATRIX={z}&tk=${TK}`,
+  `https://t1.tianditu.gov.cn/${layer}/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${layer.split('_')[0]}&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILECOL={x}&TILEROW={y}&TILEMATRIX={z}&tk=${TK}`,
+];
+
+/** 矢量底图：天地图矢量 + 中文注记（街道/行政区/地名） */
+export const DARK_STYLE = {
+  version: 8 as const,
+  sources: {
+    'tianditu-vec': {
+      type: 'raster' as const,
+      tiles: tiandituTile('vec_w'),
+      tileSize: 256,
+    },
+    'tianditu-cva': {
+      type: 'raster' as const,
+      tiles: tiandituTile('cva_w'),
+      tileSize: 256,
+    },
+  },
+  layers: [
+    { id: 'tianditu-vec', type: 'raster' as const, source: 'tianditu-vec' },
+    { id: 'tianditu-cva', type: 'raster' as const, source: 'tianditu-cva' },
+  ],
+};
+
+/** 卫星底图：天地图影像 + 中文注记 */
 export const SATELLITE_STYLE = {
   version: 8 as const,
   sources: {
     'tianditu-img': {
       type: 'raster' as const,
-      tiles: [
-        `https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILECOL={x}&TILEROW={y}&TILEMATRIX={z}&tk=2c389bb7dfa280cbbfae88532d197aa2`,
-        `https://t1.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILECOL={x}&TILEROW={y}&TILEMATRIX={z}&tk=2c389bb7dfa280cbbfae88532d197aa2`,
-      ],
+      tiles: tiandituTile('img_w'),
       tileSize: 256,
     },
     'tianditu-cia': {
       type: 'raster' as const,
-      tiles: [
-        `https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILECOL={x}&TILEROW={y}&TILEMATRIX={z}&tk=2c389bb7dfa280cbbfae88532d197aa2`,
-        `https://t1.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILECOL={x}&TILEROW={y}&TILEMATRIX={z}&tk=2c389bb7dfa280cbbfae88532d197aa2`,
-      ],
+      tiles: tiandituTile('cia_w'),
       tileSize: 256,
     },
   },
