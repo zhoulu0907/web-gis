@@ -6,11 +6,13 @@ import { fetchStations, fetchPipelines } from '../services/api';
 
 /**
  * 地图主组件
- * 渲染 MapLibre 深色底图 + 管道/站点图层 + 数据驱动样式
+ * 渲染 MapLibre 深色底图 + 管道/站点图层 + 告警闪烁动画
  */
 export default function MapBoard() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const blinkTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const blinkStateRef = useRef(false);
   const setStations = useSensorStore((s) => s.setStations);
   const setPipelines = useSensorStore((s) => s.setPipelines);
   const stations = useSensorStore((s) => s.stations);
@@ -30,7 +32,6 @@ export default function MapBoard() {
 
     map.on('load', async () => {
       try {
-        // 加载 GeoJSON 数据
         const [stationsData, pipelinesData] = await Promise.all([
           fetchStations(),
           fetchPipelines(),
@@ -39,7 +40,7 @@ export default function MapBoard() {
         setStations(stationsData);
         setPipelines(pipelinesData);
 
-        // 添加管道数据源和图层
+        // 管道数据源 + 图层
         map.addSource('pipelines', {
           type: 'geojson',
           data: pipelinesData as unknown as GeoJSON.FeatureCollection,
@@ -56,7 +57,7 @@ export default function MapBoard() {
           },
         });
 
-        // 添加站点数据源和图层
+        // 站点数据源
         map.addSource('stations', {
           type: 'geojson',
           data: stationsData as unknown as GeoJSON.FeatureCollection,
@@ -70,8 +71,7 @@ export default function MapBoard() {
           paint: {
             'circle-radius': 12,
             'circle-color': [
-              'match',
-              ['get', 'status'],
+              'match', ['get', 'status'],
               0, '#22c55e',
               1, '#eab308',
               2, '#ef4444',
@@ -89,8 +89,7 @@ export default function MapBoard() {
           paint: {
             'circle-radius': 6,
             'circle-color': [
-              'match',
-              ['get', 'status'],
+              'match', ['get', 'status'],
               0, '#22c55e',
               1, '#eab308',
               2, '#ef4444',
@@ -98,6 +97,20 @@ export default function MapBoard() {
             ],
             'circle-stroke-width': 2,
             'circle-stroke-color': '#ffffff',
+          },
+        });
+
+        // 告警闪烁图层 (仅 status=2 的站点，通过 filter 控制可见性)
+        map.addLayer({
+          id: 'stations-alarm',
+          type: 'circle',
+          source: 'stations',
+          filter: ['==', ['get', 'status'], 2],
+          paint: {
+            'circle-radius': 18,
+            'circle-color': '#ef4444',
+            'circle-opacity': 0.4,
+            'circle-blur': 0.8,
           },
         });
 
@@ -118,12 +131,26 @@ export default function MapBoard() {
             'text-halo-width': 1,
           },
         });
+
+        // 告警呼吸闪烁动画：每 500ms 切换透明度
+        blinkTimerRef.current = setInterval(() => {
+          if (!mapRef.current) return;
+          blinkStateRef.current = !blinkStateRef.current;
+          const opacity = blinkStateRef.current ? 0.6 : 0.1;
+          const radius = blinkStateRef.current ? 20 : 14;
+          map.setPaintProperty('stations-alarm', 'circle-opacity', opacity);
+          map.setPaintProperty('stations-alarm', 'circle-radius', radius);
+        }, 500);
+
       } catch (err) {
         console.error('加载地图数据失败', err);
       }
     });
 
     return () => {
+      if (blinkTimerRef.current) {
+        clearInterval(blinkTimerRef.current);
+      }
       map.remove();
       mapRef.current = null;
     };
