@@ -39,3 +39,12 @@ export async function fetchHistory(stationId: number, minutes = 5): Promise<Sens
   if (!resp.ok) throw new Error(`获取历史数据失败: ${resp.status}`);
   return resp.json();
 }
+
+/**
+ * 获取管道分段 GeoJSON 数据
+ */
+export async function fetchSegments(): Promise<GeoJsonFeatureCollection> {
+  const resp = await fetch(`${API_BASE}/pipeline/segments`);
+  if (!resp.ok) throw new Error(`获取管段数据失败: ${resp.status}`);
+  return resp.json();
+}

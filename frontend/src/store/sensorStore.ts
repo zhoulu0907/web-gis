@@ -45,6 +45,26 @@ interface SensorState {
   switchBasemap: ((type: 'vector' | 'satellite') => void) | null;
   /** MapBoard 注册底图切换回调 */
   setSwitchBasemap: (fn: (type: 'vector' | 'satellite') => void) => void;
+
+  /** 测距模式是否激活 */
+  measureActive: boolean;
+  setMeasureActive: (active: boolean) => void;
+  /** MapBoard 注册测距启动回调 */
+  startMeasure: (() => void) | null;
+  setStartMeasure: (fn: () => void) => void;
+  /** MapBoard 注册测距停止回调 */
+  stopMeasure: (() => void) | null;
+  setStopMeasure: (fn: () => void) => void;
+  /** MapBoard 注册测距清除回调 */
+  clearMeasure: (() => void) | null;
+  setClearMeasure: (fn: () => void) => void;
+
+  /** 爆管模拟是否激活 */
+  burstActive: boolean;
+  setBurstActive: (active: boolean) => void;
+  /** MapBoard 注册爆管取消回调 */
+  cancelBurst: (() => void) | null;
+  setCancelBurst: (fn: () => void) => void;
 }
 
 export const useSensorStore = create<SensorState>((set, get) => ({
@@ -57,6 +77,12 @@ export const useSensorStore = create<SensorState>((set, get) => ({
   layerVisibility: null,
   basemapType: 'vector',
   switchBasemap: null,
+  measureActive: false,
+  startMeasure: null,
+  stopMeasure: null,
+  clearMeasure: null,
+  burstActive: false,
+  cancelBurst: null,
 
   setStations: (data) => set({ stations: data }),
   setPipelines: (data) => set({ pipelines: data }),
@@ -102,4 +128,10 @@ export const useSensorStore = create<SensorState>((set, get) => ({
   setFlyToStation: (fn) => set({ flyToStation: fn }),
   setLayerVisibility: (fn) => set({ layerVisibility: fn }),
   setSwitchBasemap: (fn) => set({ switchBasemap: fn }),
+  setMeasureActive: (active) => set({ measureActive: active }),
+  setStartMeasure: (fn) => set({ startMeasure: fn }),
+  setStopMeasure: (fn) => set({ stopMeasure: fn }),
+  setClearMeasure: (fn) => set({ clearMeasure: fn }),
+  setBurstActive: (active) => set({ burstActive: active }),
+  setCancelBurst: (fn) => set({ cancelBurst: fn }),
 }));

@@ -4,6 +4,7 @@ import RightPanel from './components/RightPanel';
 import Legend from './components/Legend';
 import LayerControl from './components/LayerControl';
 import BasemapSwitcher from './components/BasemapSwitcher';
+import Toolbar from './components/Toolbar';
 import { useWebSocket } from './hooks/useWebSocket';
 import './index.css';
 
@@ -16,6 +17,7 @@ function App() {
   return (
     <div className="relative w-full h-full">
       <MapBoard />
+      <Toolbar />
       <LeftPanel />
       <RightPanel />
       <LayerControl />
