@@ -22,8 +22,8 @@ export default function MapBoard() {
     const map = new maplibregl.Map({
       container: mapContainer.current,
       style: 'https://demotiles.maplibre.org/style.json',
-      center: [121.575, 31.249],
-      zoom: 12,
+      center: [121.65, 31.25],
+      zoom: 11,
     });
 
     mapRef.current = map;
