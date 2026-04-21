@@ -17,16 +17,18 @@ export default function Toolbar() {
   const stopMeasure = useSensorStore((s) => s.stopMeasure);
   const clearMeasure = useSensorStore((s) => s.clearMeasure);
   const cancelBurst = useSensorStore((s) => s.cancelBurst);
+  const startBurst = useSensorStore((s) => s.startBurst);
 
   const handleMeasure = useCallback(() => {
     if (measureActive) {
       stopMeasure?.();
     } else {
       setBurstActive(false);
+      cancelBurst?.();
       startMeasure?.();
     }
     setMeasureActive(!measureActive);
-  }, [measureActive, startMeasure, stopMeasure, setMeasureActive, setBurstActive]);
+  }, [measureActive, startMeasure, stopMeasure, setMeasureActive, setBurstActive, cancelBurst]);
 
   const handleBurst = useCallback(() => {
     if (burstActive) {
@@ -34,10 +36,12 @@ export default function Toolbar() {
       setBurstActive(false);
     } else {
       setMeasureActive(false);
+      stopMeasure?.();
       clearMeasure?.();
       setBurstActive(true);
+      startBurst?.();
     }
-  }, [burstActive, cancelBurst, setBurstActive, setMeasureActive, clearMeasure]);
+  }, [burstActive, cancelBurst, setBurstActive, setMeasureActive, clearMeasure, stopMeasure, startBurst]);
 
   const handleClear = useCallback(() => {
     if (measureActive) {

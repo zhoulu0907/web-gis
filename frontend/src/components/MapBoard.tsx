@@ -34,6 +34,7 @@ export default function MapBoard() {
   const setStopMeasure = useSensorStore((s) => s.setStopMeasure);
   const setClearMeasure = useSensorStore((s) => s.setClearMeasure);
   const setCancelBurst = useSensorStore((s) => s.setCancelBurst);
+  const setStartBurst = useSensorStore((s) => s.setStartBurst);
   const stations = useSensorStore((s) => s.stations);
 
   // 启动告警呼吸动画
@@ -134,8 +135,15 @@ export default function MapBoard() {
     });
   }, [setStartMeasure, setStopMeasure, setClearMeasure]);
 
-  // 注册爆管取消回调
+  // 注册爆管启动/取消回调
   useEffect(() => {
+    setStartBurst(() => {
+      const map = mapRef.current;
+      if (!map) return;
+      if (map.getLayer('segments-layer')) {
+        map.setLayoutProperty('segments-layer', 'visibility', 'visible');
+      }
+    });
     setCancelBurst(() => {
       const map = mapRef.current;
       if (!map) return;
@@ -150,9 +158,13 @@ export default function MapBoard() {
       ['burst-highlight', 'burst-point'].forEach((id) => {
         if (map.getSource(id)) map.removeSource(id);
       });
+      // 隐藏管段图层
+      if (map.getLayer('segments-layer')) {
+        map.setLayoutProperty('segments-layer', 'visibility', 'none');
+      }
       map.getCanvas().style.cursor = '';
     });
-  }, [setCancelBurst]);
+  }, [setStartBurst, setCancelBurst]);
 
   // 添加管段图层
   const addSegmentsLayer = useCallback((map: maplibregl.Map) => {
@@ -162,15 +174,18 @@ export default function MapBoard() {
       type: 'geojson',
       data: segmentsDataRef.current,
     });
-    // 管段线（默认隐藏，爆管模拟时使用）
+    // 管段线（默认隐藏，仅爆管模式可见）
     map.addLayer({
       id: 'segments-layer',
       type: 'line',
       source: 'segments',
+      layout: {
+        'visibility': 'none',
+      },
       paint: {
         'line-color': '#f59e0b',
-        'line-width': 4,
-        'line-opacity': 0,
+        'line-width': 6,
+        'line-opacity': 0.7,
       },
     });
   }, []);

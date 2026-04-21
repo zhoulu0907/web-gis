@@ -62,6 +62,9 @@ interface SensorState {
   /** 爆管模拟是否激活 */
   burstActive: boolean;
   setBurstActive: (active: boolean) => void;
+  /** MapBoard 注册爆管启动回调 */
+  startBurst: (() => void) | null;
+  setStartBurst: (fn: () => void) => void;
   /** MapBoard 注册爆管取消回调 */
   cancelBurst: (() => void) | null;
   setCancelBurst: (fn: () => void) => void;
@@ -82,6 +85,7 @@ export const useSensorStore = create<SensorState>((set, get) => ({
   stopMeasure: null,
   clearMeasure: null,
   burstActive: false,
+  startBurst: null,
   cancelBurst: null,
 
   setStations: (data) => set({ stations: data }),
@@ -133,5 +137,6 @@ export const useSensorStore = create<SensorState>((set, get) => ({
   setStopMeasure: (fn) => set({ stopMeasure: fn }),
   setClearMeasure: (fn) => set({ clearMeasure: fn }),
   setBurstActive: (active) => set({ burstActive: active }),
+  setStartBurst: (fn) => set({ startBurst: fn }),
   setCancelBurst: (fn) => set({ cancelBurst: fn }),
 }));
