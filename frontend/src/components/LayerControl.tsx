@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Layers } from 'lucide-react';
+import { useSensorStore } from '../store/sensorStore';
 
 interface LayerVisibility {
   pipelines: boolean;
@@ -7,15 +8,11 @@ interface LayerVisibility {
   label: boolean;
 }
 
-interface LayerControlProps {
-  onToggle: (layers: LayerVisibility) => void;
-}
-
 /**
  * 图层控制组件
  * 控制管道线、站点、标注的显隐
  */
-export default function LayerControl({ onToggle }: LayerControlProps) {
+export default function LayerControl() {
   const [open, setOpen] = useState(false);
   const [layers, setLayers] = useState<LayerVisibility>({
     pipelines: true,
@@ -26,7 +23,9 @@ export default function LayerControl({ onToggle }: LayerControlProps) {
   function toggle(key: keyof LayerVisibility) {
     const next = { ...layers, [key]: !layers[key] };
     setLayers(next);
-    onToggle(next);
+    // 通过 store 调用 MapBoard 注册的图层显隐回调
+    const fn = useSensorStore.getState().layerVisibility;
+    if (fn) fn(next);
   }
 
   return (

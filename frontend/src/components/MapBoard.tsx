@@ -17,6 +17,7 @@ export default function MapBoard() {
   const setStations = useSensorStore((s) => s.setStations);
   const setPipelines = useSensorStore((s) => s.setPipelines);
   const setFlyToStation = useSensorStore((s) => s.setFlyToStation);
+  const setLayerVisibilityFn = useSensorStore((s) => s.setLayerVisibility);
   const stations = useSensorStore((s) => s.stations);
 
   // FlyTo: 根据站点 ID 查找坐标并飞行
@@ -36,6 +37,22 @@ export default function MapBoard() {
   useEffect(() => {
     setFlyToStation(handleFlyToStation);
   }, [setFlyToStation, handleFlyToStation]);
+
+  // 注册图层显隐回调到 store
+  useEffect(() => {
+    setLayerVisibilityFn((layers) => {
+      const map = mapRef.current;
+      if (!map) return;
+      const setVis = (id: string, visible: boolean) => {
+        map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+      };
+      setVis('pipelines-layer', layers.pipelines);
+      setVis('stations-glow', layers.stations);
+      setVis('stations-layer', layers.stations);
+      setVis('stations-alarm', layers.stations);
+      setVis('stations-label', layers.label);
+    });
+  }, [setLayerVisibilityFn]);
 
   // 初始化地图
   useEffect(() => {
@@ -232,20 +249,4 @@ export default function MapBoard() {
   }, [stations]);
 
   return <div ref={mapContainer} className="w-full h-full" />;
-}
-
-/** 图层显隐控制（由 App 调用） */
-export function setLayerVisibility(
-  map: maplibregl.Map,
-  layers: { pipelines: boolean; stations: boolean; label: boolean }
-) {
-  const setVis = (id: string, visible: boolean) => {
-    map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
-  };
-
-  setVis('pipelines-layer', layers.pipelines);
-  setVis('stations-glow', layers.stations);
-  setVis('stations-layer', layers.stations);
-  setVis('stations-alarm', layers.stations);
-  setVis('stations-label', layers.label);
 }

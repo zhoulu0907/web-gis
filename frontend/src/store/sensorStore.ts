@@ -29,6 +29,13 @@ interface SensorState {
   flyToStation: ((stationId: number) => void) | null;
   /** MapBoard 注册 flyTo 回调 */
   setFlyToStation: (fn: (stationId: number) => void) => void;
+
+  /**
+   * 图层显隐回调：由 MapBoard 注册，LayerControl 调用
+   */
+  layerVisibility: ((layers: { pipelines: boolean; stations: boolean; label: boolean }) => void) | null;
+  /** MapBoard 注册图层显隐回调 */
+  setLayerVisibility: (fn: (layers: { pipelines: boolean; stations: boolean; label: boolean }) => void) => void;
 }
 
 export const useSensorStore = create<SensorState>((set, get) => ({
@@ -38,6 +45,7 @@ export const useSensorStore = create<SensorState>((set, get) => ({
   alarmLogs: [],
   wsConnected: false,
   flyToStation: null,
+  layerVisibility: null,
 
   setStations: (data) => set({ stations: data }),
   setPipelines: (data) => set({ pipelines: data }),
@@ -81,4 +89,5 @@ export const useSensorStore = create<SensorState>((set, get) => ({
 
   setWsConnected: (connected) => set({ wsConnected: connected }),
   setFlyToStation: (fn) => set({ flyToStation: fn }),
+  setLayerVisibility: (fn) => set({ layerVisibility: fn }),
 }));
