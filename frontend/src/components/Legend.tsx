@@ -12,7 +12,9 @@ export default function Legend() {
         <LegendItem color="#ff5252" label="告警" />
       </div>
       <div className="flex gap-4 mt-2">
-        <LineLegend color="#f59e0b" label="管道" />
+        <LineLegend color="#00bcd4" label="正常管道" />
+        <LineLegend color="#ffd54f" label="预警管道" />
+        <LineLegend color="#ff5252" label="告警管道" />
       </div>
     </div>
   );

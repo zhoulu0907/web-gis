@@ -54,30 +54,13 @@ export const SATELLITE_STYLE = {
 
 /**
  * 添加业务图层到地图
- * 包含: 管道、站点光晕、站点圆点、告警闪烁、标注
+ * 包含: 站点光晕、站点圆点、告警闪烁、标注
+ * (管道由 segments-layer 负责，不在本函数添加)
  */
 export function addBusinessLayers(
   map: Map,
   stationsData: GeoJsonFeatureCollection,
-  pipelinesData: GeoJsonFeatureCollection,
 ): void {
-  // 管道
-  map.addSource('pipelines', {
-    type: 'geojson',
-    data: pipelinesData as unknown as GeoJSON.FeatureCollection,
-  });
-  map.addLayer({
-    id: 'pipelines-layer',
-    type: 'line',
-    source: 'pipelines',
-    paint: {
-      'line-color': '#f59e0b',
-      'line-width': 3,
-      'line-opacity': 0.8,
-      'line-dasharray': [0, 4, 3],
-    },
-  });
-
   // 站点
   map.addSource('stations', {
     type: 'geojson',
@@ -90,7 +73,7 @@ export function addBusinessLayers(
     type: 'circle',
     source: 'stations',
     paint: {
-      'circle-radius': 12,
+      'circle-radius': 16,
       'circle-color': [
         'match', ['get', 'status'],
         0, '#69f0ae',
@@ -98,7 +81,7 @@ export function addBusinessLayers(
         2, '#ff5252',
         '#69f0ae',
       ],
-      'circle-opacity': 0.2,
+      'circle-opacity': 0.25,
     },
   });
 
@@ -108,7 +91,7 @@ export function addBusinessLayers(
     type: 'circle',
     source: 'stations',
     paint: {
-      'circle-radius': 6,
+      'circle-radius': 8,
       'circle-color': [
         'match', ['get', 'status'],
         0, '#69f0ae',
@@ -116,7 +99,7 @@ export function addBusinessLayers(
         2, '#ff5252',
         '#69f0ae',
       ],
-      'circle-stroke-width': 2,
+      'circle-stroke-width': 2.5,
       'circle-stroke-color': '#ffffff',
     },
   });
@@ -128,7 +111,7 @@ export function addBusinessLayers(
     source: 'stations',
     filter: ['==', ['get', 'status'], 2],
     paint: {
-      'circle-radius': 18,
+      'circle-radius': 22,
       'circle-color': '#ff5252',
       'circle-opacity': 0.4,
       'circle-blur': 0.8,
@@ -142,14 +125,14 @@ export function addBusinessLayers(
     source: 'stations',
     layout: {
       'text-field': ['get', 'name'],
-      'text-size': 12,
-      'text-offset': [0, 1.5],
+      'text-size': 13,
+      'text-offset': [0, 1.8],
       'text-anchor': 'top',
     },
     paint: {
-      'text-color': '#b0bec5',
+      'text-color': '#e2e8f0',
       'text-halo-color': '#001529',
-      'text-halo-width': 1,
+      'text-halo-width': 2,
     },
   });
 }

@@ -2,7 +2,6 @@ import { useEffect, useRef, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import * as echarts from 'echarts';
-import * as turf from '@turf/turf';
 import { useSensorStore } from '../store/sensorStore';
 import { fetchStations, fetchPipelines, fetchHistory, fetchSegments } from '../services/api';
 import { addBusinessLayers, DARK_STYLE, SATELLITE_STYLE } from '../utils/mapLayers';
@@ -24,6 +23,8 @@ export default function MapBoard() {
   const burstPulseRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const burstPulseStateRef = useRef(false);
   const segmentsDataRef = useRef<GeoJSON.FeatureCollection | null>(null);
+  const alarmFlowTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const alarmFlowFrameRef = useRef(0);
 
   const setStations = useSensorStore((s) => s.setStations);
   const setPipelines = useSensorStore((s) => s.setPipelines);
@@ -35,6 +36,8 @@ export default function MapBoard() {
   const setClearMeasure = useSensorStore((s) => s.setClearMeasure);
   const setCancelBurst = useSensorStore((s) => s.setCancelBurst);
   const setStartBurst = useSensorStore((s) => s.setStartBurst);
+  const setToggleAnnotation = useSensorStore((s) => s.setToggleAnnotation);
+  const setOpenStationPopup = useSensorStore((s) => s.setOpenStationPopup);
   const stations = useSensorStore((s) => s.stations);
 
   // 启动告警呼吸动画
@@ -44,11 +47,11 @@ export default function MapBoard() {
       if (!mapRef.current) return;
       blinkStateRef.current = !blinkStateRef.current;
       mapRef.current.setPaintProperty('stations-alarm', 'circle-opacity', blinkStateRef.current ? 0.6 : 0.1);
-      mapRef.current.setPaintProperty('stations-alarm', 'circle-radius', blinkStateRef.current ? 20 : 14);
+      mapRef.current.setPaintProperty('stations-alarm', 'circle-radius', blinkStateRef.current ? 26 : 16);
     }, 500);
   }, []);
 
-  // 启动管道流动动画
+  // 启动管道流动动画（操作 segments-layer）
   const startFlowAnimation = useCallback(() => {
     if (flowTimerRef.current) clearInterval(flowTimerRef.current);
     const dashArraySequences = [
@@ -60,8 +63,24 @@ export default function MapBoard() {
     flowTimerRef.current = setInterval(() => {
       if (!mapRef.current) return;
       flowFrameRef.current = (flowFrameRef.current + 1) % dashArraySequences.length;
-      mapRef.current.setPaintProperty('pipelines-layer', 'line-dasharray', dashArraySequences[flowFrameRef.current]);
+      mapRef.current.setPaintProperty('segments-layer', 'line-dasharray', dashArraySequences[flowFrameRef.current]);
     }, 100);
+  }, []);
+
+  // 启动告警管段流动动画（更快，60ms 间隔）
+  const startAlarmFlowAnimation = useCallback(() => {
+    if (alarmFlowTimerRef.current) clearInterval(alarmFlowTimerRef.current);
+    const dashArraySequences = [
+      [0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5],
+      [2, 4, 1], [2.5, 4, 0.5], [3, 4, 0], [0, 0.5, 3, 3.5],
+      [0, 1, 3, 3], [0, 1.5, 3, 2.5], [0, 2, 3, 2], [0, 2.5, 3, 1.5],
+      [0, 3, 3, 1], [0, 3.5, 3, 0.5],
+    ];
+    alarmFlowTimerRef.current = setInterval(() => {
+      if (!mapRef.current) return;
+      alarmFlowFrameRef.current = (alarmFlowFrameRef.current + 1) % dashArraySequences.length;
+      mapRef.current.setPaintProperty('segments-alarm-layer', 'line-dasharray', dashArraySequences[alarmFlowFrameRef.current]);
+    }, 60);
   }, []);
 
   // FlyTo
@@ -83,8 +102,7 @@ export default function MapBoard() {
     setSwitchBasemap((type: 'vector' | 'satellite') => {
       const map = mapRef.current;
       const st = useSensorStore.getState().stations;
-      const pl = useSensorStore.getState().pipelines;
-      if (!map || !st || !pl) return;
+      if (!map || !st) return;
       const center = map.getCenter();
       const zoom = map.getZoom();
       const bearing = map.getBearing();
@@ -92,15 +110,22 @@ export default function MapBoard() {
       const newStyle = type === 'vector' ? DARK_STYLE : SATELLITE_STYLE;
       map.setStyle(newStyle as maplibregl.StyleSpecification);
       map.once('style.load', () => {
-        addBusinessLayers(map, st, pl);
+        addBusinessLayers(map, st);
         addSegmentsLayer(map);
         map.jumpTo({ center, zoom, bearing, pitch });
         startBlinkAnimation();
         startFlowAnimation();
+        startAlarmFlowAnimation();
+        // 同步注记状态
+        const { annotationVisible } = useSensorStore.getState();
+        const annotationLayer = type === 'vector' ? 'tianditu-cva' : 'tianditu-cia';
+        if (!annotationVisible) {
+          map.setLayoutProperty(annotationLayer, 'visibility', 'none');
+        }
       });
       useSensorStore.getState().setBasemapType(type);
     });
-  }, [setSwitchBasemap, startBlinkAnimation, startFlowAnimation]);
+  }, [setSwitchBasemap, startBlinkAnimation, startFlowAnimation, startAlarmFlowAnimation]);
 
   // 注册图层显隐回调
   useEffect(() => {
@@ -110,13 +135,82 @@ export default function MapBoard() {
       const setVis = (id: string, visible: boolean) => {
         map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
       };
-      setVis('pipelines-layer', layers.pipelines);
+      setVis('segments-glow', layers.pipelines);
+      setVis('segments-layer', layers.pipelines);
+      setVis('segments-alarm-layer', layers.pipelines);
       setVis('stations-glow', layers.stations);
       setVis('stations-layer', layers.stations);
       setVis('stations-alarm', layers.stations);
       setVis('stations-label', layers.label);
     });
   }, [setLayerVisibilityFn]);
+
+  // 注册注记切换回调
+  useEffect(() => {
+    setToggleAnnotation(() => {
+      const map = mapRef.current;
+      if (!map) return;
+      const { annotationVisible, basemapType } = useSensorStore.getState();
+      const layerId = basemapType === 'vector' ? 'tianditu-cva' : 'tianditu-cia';
+      const newVisible = !annotationVisible;
+      map.setLayoutProperty(layerId, 'visibility', newVisible ? 'visible' : 'none');
+      useSensorStore.getState().setAnnotationVisible(newVisible);
+    });
+  }, [setToggleAnnotation]);
+
+  // 提取站点弹窗函数（供地图点击和搜索联动共用）
+  const openPopupForStation = useCallback((stationId: number) => {
+    const map = mapRef.current;
+    const st = useSensorStore.getState().stations;
+    if (!map || !st) return;
+    const feature = st.features.find((f) => f.id === stationId);
+    if (!feature) return;
+    const coordinates = (feature.geometry as GeoJSON.Point).coordinates.slice() as [number, number];
+
+    map.flyTo({ center: coordinates, zoom: 14, duration: 1500 });
+    map.once('moveend', () => {
+      const popupEl = document.createElement('div');
+      popupEl.className = 'sensor-popup';
+      const loadingEl = document.createElement('div');
+      loadingEl.className = 'sensor-popup-loading';
+      loadingEl.textContent = '加载历史数据...';
+      popupEl.appendChild(loadingEl);
+      const chartEl = document.createElement('div');
+      chartEl.className = 'sensor-popup-chart';
+      popupEl.appendChild(chartEl);
+
+      const videoBtn = document.createElement('button');
+      videoBtn.textContent = '查看监控视频';
+      videoBtn.style.cssText = 'margin-top:8px;width:100%;padding:6px 0;border:1px solid rgba(0,160,233,0.5);border-radius:4px;background:rgba(0,160,233,0.15);color:#00e5ff;font-size:12px;cursor:pointer;';
+      videoBtn.onmouseover = () => { videoBtn.style.background = 'rgba(0,160,233,0.3)'; };
+      videoBtn.onmouseout = () => { videoBtn.style.background = 'rgba(0,160,233,0.15)'; };
+      videoBtn.onclick = () => { alert('监控视频功能开发中...'); };
+      popupEl.appendChild(videoBtn);
+
+      const popup = new maplibregl.Popup({ closeButton: true, maxWidth: '360px' })
+        .setLngLat(coordinates)
+        .setDOMContent(popupEl)
+        .addTo(map);
+
+      let chart: echarts.ECharts | null = null;
+      popup.on('close', () => { if (chart) { chart.dispose(); chart = null; } });
+
+      (async () => {
+        try {
+          const history = await fetchHistory(stationId, 5);
+          loadingEl.style.display = 'none';
+          chartEl.style.display = 'block';
+          chart = echarts.init(chartEl);
+          chart.setOption(createTrendChartOption(history.stationName, history.timestamps, history.pressures, history.flows));
+        } catch {
+          loadingEl.textContent = '加载失败';
+        }
+      })();
+    });
+  }, []);
+
+  // 注册搜索定位弹窗回调
+  useEffect(() => { setOpenStationPopup(openPopupForStation); }, [setOpenStationPopup, openPopupForStation]);
 
   // 注册测距回调
   useEffect(() => {
@@ -138,11 +232,7 @@ export default function MapBoard() {
   // 注册爆管启动/取消回调
   useEffect(() => {
     setStartBurst(() => {
-      const map = mapRef.current;
-      if (!map) return;
-      if (map.getLayer('segments-layer')) {
-        map.setLayoutProperty('segments-layer', 'visibility', 'visible');
-      }
+      // segments-layer 已默认可见，无需额外操作
     });
     setCancelBurst(() => {
       const map = mapRef.current;
@@ -158,37 +248,99 @@ export default function MapBoard() {
       ['burst-highlight', 'burst-point'].forEach((id) => {
         if (map.getSource(id)) map.removeSource(id);
       });
-      // 隐藏管段图层
-      if (map.getLayer('segments-layer')) {
-        map.setLayoutProperty('segments-layer', 'visibility', 'none');
-      }
       map.getCanvas().style.cursor = '';
     });
   }, [setStartBurst, setCancelBurst]);
 
-  // 添加管段图层
+  // 根据站点状态计算管段 maxStatus
+  const computeSegmentStatuses = useCallback(
+    (segments: GeoJSON.FeatureCollection, stations: GeoJSON.FeatureCollection | null): GeoJSON.FeatureCollection => {
+      if (!stations) return segments;
+      return {
+        ...segments,
+        features: segments.features.map((f) => {
+          const props = f.properties as Record<string, unknown>;
+          const startId = props.startStationId as number;
+          const endId = props.endStationId as number;
+          const startStation = stations.features.find((sf) => sf.id === startId);
+          const endStation = stations.features.find((sf) => sf.id === endId);
+          const startStatus = startStation ? ((startStation.properties as Record<string, unknown>).status as number) : 0;
+          const endStatus = endStation ? ((endStation.properties as Record<string, unknown>).status as number) : 0;
+          const maxStatus = Math.max(startStatus, endStatus);
+          return { ...f, properties: { ...props, maxStatus } };
+        }),
+      };
+    }, [],
+  );
+
+  // 添加管段图层（默认可见，替代原 pipelines-layer）
   const addSegmentsLayer = useCallback((map: maplibregl.Map) => {
     if (!segmentsDataRef.current) return;
     if (map.getSource('segments')) return; // 已存在
+
+    const st = useSensorStore.getState().stations;
+    const enrichedData = computeSegmentStatuses(segmentsDataRef.current, st as unknown as GeoJSON.FeatureCollection | null);
+
     map.addSource('segments', {
       type: 'geojson',
-      data: segmentsDataRef.current,
+      data: enrichedData,
     });
-    // 管段线（默认隐藏，仅爆管模式可见）
+
+    // 管段光晕
+    map.addLayer({
+      id: 'segments-glow',
+      type: 'line',
+      source: 'segments',
+      paint: {
+        'line-color': [
+          'match', ['get', 'maxStatus'],
+          0, '#00bcd4',
+          1, '#ffd54f',
+          2, '#ff5252',
+          '#00bcd4',
+        ],
+        'line-width': 10,
+        'line-blur': 4,
+        'line-opacity': 0.15,
+      },
+    });
+
+    // 管段主线（默认可见，data-driven 着色）
     map.addLayer({
       id: 'segments-layer',
       type: 'line',
       source: 'segments',
       layout: {
-        'visibility': 'none',
+        'visibility': 'visible',
       },
       paint: {
-        'line-color': '#f59e0b',
-        'line-width': 6,
-        'line-opacity': 0.7,
+        'line-color': [
+          'match', ['get', 'maxStatus'],
+          0, '#00bcd4',
+          1, '#ffd54f',
+          2, '#ff5252',
+          '#00bcd4',
+        ],
+        'line-width': 4,
+        'line-opacity': 0.8,
+        'line-dasharray': [0, 4, 3],
       },
     });
-  }, []);
+
+    // 告警管段（maxStatus=2，更快的流动虚线）
+    map.addLayer({
+      id: 'segments-alarm-layer',
+      type: 'line',
+      source: 'segments',
+      filter: ['==', ['get', 'maxStatus'], 2],
+      paint: {
+        'line-color': '#ff5252',
+        'line-width': 4,
+        'line-opacity': 0.9,
+        'line-dasharray': [0, 4, 3],
+      },
+    });
+  }, [computeSegmentStatuses]);
 
   // 爆管模拟处理
   const handleBurstClick = useCallback((clickedSegmentId: number) => {
@@ -328,10 +480,11 @@ export default function MapBoard() {
         setPipelines(pipelinesData);
         segmentsDataRef.current = segmentsData as unknown as GeoJSON.FeatureCollection;
 
-        addBusinessLayers(map, stationsData, pipelinesData);
+        addBusinessLayers(map, stationsData);
         addSegmentsLayer(map);
         startBlinkAnimation();
         startFlowAnimation();
+        startAlarmFlowAnimation();
 
       } catch (err) {
         console.error('加载地图数据失败', err);
@@ -385,42 +538,12 @@ export default function MapBoard() {
       map.getCanvas().style.cursor = 'crosshair';
     });
 
-    // 点击站点弹出 Popup + ECharts 折线图
-    map.on('click', 'stations-layer', async (e) => {
+    // 点击站点弹出 Popup（复用 openPopupForStation）
+    map.on('click', 'stations-layer', (e) => {
       if (useSensorStore.getState().measureActive) return;
       if (!e.features || e.features.length === 0) return;
-      const feature = e.features[0];
-      const stationId = feature.id as number;
-      const stationName = (feature.properties as Record<string, unknown>).name as string;
-      const coordinates = (feature.geometry as GeoJSON.Point).coordinates.slice() as [number, number];
-
-      const popupEl = document.createElement('div');
-      popupEl.className = 'sensor-popup';
-      const loadingEl = document.createElement('div');
-      loadingEl.className = 'sensor-popup-loading';
-      loadingEl.textContent = '加载历史数据...';
-      popupEl.appendChild(loadingEl);
-      const chartEl = document.createElement('div');
-      chartEl.className = 'sensor-popup-chart';
-      popupEl.appendChild(chartEl);
-
-      const popup = new maplibregl.Popup({ closeButton: true, maxWidth: '360px' })
-        .setLngLat(coordinates)
-        .setDOMContent(popupEl)
-        .addTo(map);
-
-      let chart: echarts.ECharts | null = null;
-      popup.on('close', () => { if (chart) { chart.dispose(); chart = null; } });
-
-      try {
-        const history = await fetchHistory(stationId, 5);
-        loadingEl.style.display = 'none';
-        chartEl.style.display = 'block';
-        chart = echarts.init(chartEl);
-        chart.setOption(createTrendChartOption(history.stationName, history.timestamps, history.pressures, history.flows));
-      } catch {
-        loadingEl.textContent = '加载失败';
-      }
+      const stationId = e.features[0].id as number;
+      openPopupForStation(stationId);
     });
 
     // 爆管模拟：点击管段
@@ -434,6 +557,7 @@ export default function MapBoard() {
     return () => {
       if (blinkTimerRef.current) clearInterval(blinkTimerRef.current);
       if (flowTimerRef.current) clearInterval(flowTimerRef.current);
+      if (alarmFlowTimerRef.current) clearInterval(alarmFlowTimerRef.current);
       if (burstPulseRef.current) clearInterval(burstPulseRef.current);
       measureToolRef.current?.destroy();
       if (tooltipRef.current) {
@@ -445,16 +569,27 @@ export default function MapBoard() {
       map.remove();
       mapRef.current = null;
     };
-  }, [setStations, setPipelines, startBlinkAnimation, startFlowAnimation, addSegmentsLayer, handleBurstClick]);
+  }, [setStations, setPipelines, startBlinkAnimation, startFlowAnimation, startAlarmFlowAnimation, addSegmentsLayer, handleBurstClick, openPopupForStation]);
 
-  // 监听站点数据变化
+  // 监听站点数据变化 — 同步更新 segments 的 maxStatus
   useEffect(() => {
     if (!mapRef.current || !stations) return;
-    const source = mapRef.current.getSource('stations') as maplibregl.GeoJSONSource;
-    if (source) {
-      source.setData(stations as unknown as GeoJSON.FeatureCollection);
+    const stationsSource = mapRef.current.getSource('stations') as maplibregl.GeoJSONSource;
+    if (stationsSource) {
+      stationsSource.setData(stations as unknown as GeoJSON.FeatureCollection);
     }
-  }, [stations]);
+    // 同步更新 segments 数据
+    if (segmentsDataRef.current) {
+      const enriched = computeSegmentStatuses(
+        segmentsDataRef.current,
+        stations as unknown as GeoJSON.FeatureCollection,
+      );
+      const segmentsSource = mapRef.current.getSource('segments') as maplibregl.GeoJSONSource;
+      if (segmentsSource) {
+        segmentsSource.setData(enriched);
+      }
+    }
+  }, [stations, computeSegmentStatuses]);
 
   return <div ref={mapContainer} className="w-full h-full" />;
 }

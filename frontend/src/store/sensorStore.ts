@@ -68,6 +68,17 @@ interface SensorState {
   /** MapBoard 注册爆管取消回调 */
   cancelBurst: (() => void) | null;
   setCancelBurst: (fn: () => void) => void;
+
+  /** 注记图层是否可见 */
+  annotationVisible: boolean;
+  /** 切换注记图层回调（由 MapBoard 注册） */
+  toggleAnnotation: (() => void) | null;
+  setToggleAnnotation: (fn: () => void) => void;
+  setAnnotationVisible: (visible: boolean) => void;
+
+  /** 搜索定位弹窗回调（由 MapBoard 注册，SearchBar 调用） */
+  openStationPopup: ((stationId: number) => void) | null;
+  setOpenStationPopup: (fn: (stationId: number) => void) => void;
 }
 
 export const useSensorStore = create<SensorState>((set, get) => ({
@@ -87,6 +98,9 @@ export const useSensorStore = create<SensorState>((set, get) => ({
   burstActive: false,
   startBurst: null,
   cancelBurst: null,
+  annotationVisible: true,
+  toggleAnnotation: null,
+  openStationPopup: null,
 
   setStations: (data) => set({ stations: data }),
   setPipelines: (data) => set({ pipelines: data }),
@@ -139,4 +153,7 @@ export const useSensorStore = create<SensorState>((set, get) => ({
   setBurstActive: (active) => set({ burstActive: active }),
   setStartBurst: (fn) => set({ startBurst: fn }),
   setCancelBurst: (fn) => set({ cancelBurst: fn }),
+  setToggleAnnotation: (fn) => set({ toggleAnnotation: fn }),
+  setAnnotationVisible: (visible) => set({ annotationVisible: visible }),
+  setOpenStationPopup: (fn) => set({ openStationPopup: fn }),
 }));
